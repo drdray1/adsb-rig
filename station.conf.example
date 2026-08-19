@@ -1,0 +1,40 @@
+# station.conf — where your receiver physically is, plus local tuning.
+#
+#     cp station.conf.example station.conf
+#     $EDITOR station.conf
+#     ./install.sh
+#
+# This file is gitignored. Your coordinates are personal data: combined with
+# the timestamps in captures/, they pin down your home. Ship the example, never
+# the real one.
+#
+# The ':' + ':=' form means an environment variable wins over the file, so
+# `LAT=40.5 ./install.sh` still works for a one-off.
+
+# ---- Receiver position -------------------------------------------------------
+# Decimal degrees. South and West are negative.
+# Enables map centering and range rings.
+#
+# For MLAT this is NOT good enough: multilateration solves position from
+# nanosecond time-of-arrival differences, so a receiver location that is off by
+# even ~50 m poisons the solution for everyone in your cluster. If you ever feed
+# MLAT, replace this with your actual antenna position from a phone GPS or from
+# Google Maps satellite view, to 5 decimal places.
+
+# : "${LAT:=00.00000}"
+# : "${LON:=000.00000}"
+
+# Antenna height is deliberately absent: readsb has no altitude flag (verified
+# against `readsb --help`). Height is an mlat-client parameter, supplied there.
+
+# ---- Tuning ------------------------------------------------------------------
+# Tuner gain. 'auto' is right for most setups. A specific dB value can beat it
+# when a strong local transmitter is desensitising the front end.
+# : "${GAIN:=auto}"
+
+# CPU relief for weak boards. readsb's own help: "lower threshold -> more CPU
+# usage (default: 58, pi zero / pi 1: 75, hot CPU 42)".
+# : "${PREAMBLE:=75}"
+
+# Feeder flush interval in seconds. 3600 = hourly.
+# : "${INTERVAL:=3600}"

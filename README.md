@@ -234,10 +234,53 @@ unit.
 
 ## Tuning
 
+### Where you are
+
+Copy the example and put your coordinates in it:
+
+```bash
+cp station.conf.example station.conf
+$EDITOR station.conf
+./install.sh          # re-renders the units
+```
+
+```bash
+# Decimal degrees. South and West are negative.
+: "${LAT:=51.47800}"
+: "${LON:=-0.46130}"
+```
+
+`station.conf` is **gitignored**, and deliberately so. Coordinates are personal
+data — combined with the timestamps in `captures/`, they pin down where you
+live. The repo ships only `station.conf.example`.
+
+The `: "${VAR:=...}"` form means an environment variable still wins, so
+`LAT=40.5 LON=-111.9 ./install.sh` works for a one-off without editing the file.
+
+Confirm it took effect:
+
+```bash
+cat tar1090/html/data/receiver.json     # should show your lat/lon
+```
+
+Once set, aircraft entries in `aircraft.json` gain an `r_dst` field — distance
+from you in nautical miles. That is the number to watch when you move the
+antenna; it tells you whether a change actually helped.
+
+> **A city-centre coordinate is fine here and not fine for MLAT.**
+> Multilateration solves position from nanosecond differences in time-of-arrival
+> across receivers, so a station location off by even ~50 m degrades the
+> solution for everyone in your cluster. Before feeding MLAT, replace this with
+> your actual antenna position to 5 decimal places.
+>
+> There is no altitude setting here on purpose: **readsb has no altitude flag**
+> (checked against `readsb --help`). Antenna height is an `mlat-client`
+> parameter and is supplied there.
+
 | What | Where | Notes |
 |---|---|---|
 | Gain | `GAIN=auto ./install.sh` | Or a fixed value from the tuner's table: `49.6 44.5 40.2 36.4 32.8`. Higher isn't automatically better — a strong nearby transmitter can overload the front end. |
-| Receiver location | add `--lat`/`--lon` to the readsb args | Optional. Centers the map and enables range rings. |
+| Receiver location | `station.conf` | See below. Centres the map, enables range rings, and lets readsb report a distance per aircraft. |
 | Upload interval | `INTERVAL=3600 ./install.sh` | Seconds. |
 | Beast port | `BEAST_PORT=30005 ./install.sh` | What vendor feeder clients read. |
 | Map port | `HTTP_PORT=8080 ./install.sh` | Bound to `127.0.0.1` deliberately. |

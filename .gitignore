@@ -22,8 +22,10 @@ aircraft.csv.gz
 __pycache__/
 *.pyc
 
-# Your active feed list — machine-specific. Ship only the example.
+# Machine-specific config. Ship only the examples.
+# station.conf holds your receiver coordinates.
 feeds.conf
+station.conf
 
 # Never
 *.key

@@ -16,6 +16,14 @@ CONFIG_DIR="$HOME/.config/adsb-rig"
 LOG_DIR="$RIG_DIR/logs"
 PREFIX="com.drdray1.adsb"
 
+# Local, gitignored settings: receiver position and tuning. Sourced before the
+# defaults below so a value set here becomes the default; the file uses the
+# ${VAR:=} form so a real environment variable still overrides it.
+if [ -f "$RIG_DIR/station.conf" ]; then
+  # shellcheck source=/dev/null
+  . "$RIG_DIR/station.conf"
+fi
+
 HTTP_PORT="${HTTP_PORT:-8080}"
 BEAST_PORT="${BEAST_PORT:-30005}"
 GAIN="${GAIN:-auto}"
@@ -195,6 +203,20 @@ fi
 # CPU relief for weak boards. readsb documents this itself: "lower threshold ->
 # more CPU usage (default: 58, pi zero / pi 1: 75, hot CPU 42)". readsb has no
 # sample-rate knob — this is the one that matters.
+# Receiver position. Centres the map and enables range rings. Not sufficient
+# for MLAT, which needs the real antenna position to a few metres.
+if [ -n "${LAT:-}" ] && [ -n "${LON:-}" ]; then
+  {
+    printf '\t\t<string>--lat</string>\n'
+    printf '\t\t<string>%s</string>\n' "$LAT"
+    printf '\t\t<string>--lon</string>\n'
+    printf '\t\t<string>%s</string>\n' "$LON"
+  } >> "$CONNECTOR_XML"
+  echo "  receiver position $LAT, $LON"
+elif [ -n "${LAT:-}${LON:-}" ]; then
+  warn "LAT and LON must both be set; ignoring the one that is."
+fi
+
 if [ -n "${PREAMBLE:-}" ]; then
   {
     printf '\t\t<string>--preamble-threshold</string>\n'
