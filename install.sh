@@ -17,6 +17,7 @@ LOG_DIR="$RIG_DIR/logs"
 PREFIX="com.drdray1.adsb"
 
 HTTP_PORT="${HTTP_PORT:-8080}"
+BEAST_PORT="${BEAST_PORT:-30005}"
 GAIN="${GAIN:-auto}"
 INTERVAL="${INTERVAL:-3600}"
 SBS_PORT=""
@@ -223,6 +224,7 @@ render() {  # $1=template $2=dest
       -e "s|__PYTHON__|$PYTHON_BIN|g" \
       -e "s|__SBS_PORT__|$SBS_PORT|g" \
       -e "s|__HTTP_PORT__|$HTTP_PORT|g" \
+      -e "s|__BEAST_PORT__|$BEAST_PORT|g" \
       -e "s|__INTERVAL__|$INTERVAL|g" \
       -e "s|__GAIN__|$GAIN|g" \
       -e "/__CONNECTORS__/r $CONNECTOR_XML" \
@@ -234,6 +236,7 @@ cat > "$CONFIG_DIR/env" <<EOF
 # Written by install.sh — read by adsb-ctl.
 SBS_PORT=$SBS_PORT
 HTTP_PORT=$HTTP_PORT
+BEAST_PORT=$BEAST_PORT
 LOG_DIR=$LOG_DIR
 PREFIX=$PREFIX
 FEEDER_INSTANCE=localhost:$SBS_PORT

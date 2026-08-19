@@ -24,6 +24,10 @@
 		<string>--net</string>
 		<string>--net-sbs-port</string>
 		<string>__SBS_PORT__</string>
+		<!-- Beast output. This is what piaware, fr24feed, RadarBox and most
+		     vendor feeder clients read from. Costs nothing when unused. -->
+		<string>--net-bo-port</string>
+		<string>__BEAST_PORT__</string>
 		<string>--quiet</string>
 		<!-- install.sh replaces the next line with one net-connector pair per
 		     active entry in feeds.conf, plus the uuid flag. Removed entirely if there

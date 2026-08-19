@@ -16,6 +16,7 @@ CONFIG="${ADSB_RIG_CONFIG:-$HOME/.config/adsb-rig/env}"
 
 SBS_PORT="${SBS_PORT:-30003}"
 HTTP_PORT="${HTTP_PORT:-8080}"
+BEAST_PORT="${BEAST_PORT:-30005}"
 LOG_DIR="${LOG_DIR:-$HOME/adsb/logs}"
 PREFIX="${PREFIX:-com.drdray1.adsb}"
 FEEDER_INSTANCE="${FEEDER_INSTANCE:-localhost:$SBS_PORT}"
@@ -181,6 +182,7 @@ do_status() {
   "${PLATFORM}_status"
   echo
   port_state "$SBS_PORT" "SBS-1"
+  port_state "$BEAST_PORT" "Beast"
   port_state "$HTTP_PORT" "map"
   aircraft_state
 }

@@ -9,7 +9,8 @@ unless you explicitly turn on a feeder.
 
 ```
 RTL-SDR dongle ──> readsb ──┬──> tar1090 map          http://localhost:8080
-                            ├──> SBS-1 TCP :30003     any consumer you like
+                            ├──> SBS-1 TCP :30003     Muninn, Virtual Radar
+                            ├──> Beast   TCP :30005   piaware, fr24feed, RadarBox
                             ├──> aggregators         adsb.fi, airplanes.live, ...
                             └──> optional feeder ──>  WDGWars (via Muninn)
 ```
@@ -119,7 +120,7 @@ on Linux) and point any consumer at them:
 
 | Flag | Output | Typical consumer |
 |---|---|---|
-| `--net-bo-port` | Beast binary | piaware, adsbexchange feeders |
+| `--net-bo-port` | Beast binary (**on by default here, :30005**) | piaware, fr24feed, RadarBox |
 | `--net-sbs-port` | SBS-1 / BaseStation text | this repo's feeder, Virtual Radar |
 | `--net-ro-port` | Raw AVR Mode-S | pyModeS and friends |
 | `--net-vrs-port` | VRS JSON | Virtual Radar Server |
@@ -166,8 +167,49 @@ hosts occasionally, so check their own docs if one stops connecting.
 - **MLAT** needs a separate `mlat-client` daemon and your exact coordinates. The ports
   above are ADS-B only.
 - **FlightAware, FlightRadar24, RadarBox, PlaneFinder** run their own feeder clients with
-  their own accounts and keys. Rather than adding them to `feeds.conf`, enable
-  `--net-bo-port 30005` on readsb and point their client at `localhost:30005`.
+  their own accounts and keys. They read **Beast** rather than connecting the way the
+  aggregators above do — see below.
+
+### FlightAware (PiAware)
+
+readsb serves Beast on **30005** by default here, which is what `piaware`, `fr24feed`,
+RadarBox and PlaneFinder all read. You do **not** need dump1090-fa; this rig replaces it.
+
+`piaware` is packaged for Raspberry Pi OS only — there's no macOS build — so this is the
+one thing that genuinely wants the Pi rather than the Mac.
+
+```bash
+wget https://www.flightaware.com/adsb/piaware/files/packages/pool/piaware/f/flightaware-apt-repository/flightaware-apt-repository_1.3_all.deb
+sudo dpkg -i flightaware-apt-repository_1.3_all.deb
+sudo apt update && sudo apt install piaware
+```
+
+**Skip `sudo apt install dump1090-fa`** — that step in FlightAware's guide is for people
+without a decoder. You have readsb. Instead point piaware at it:
+
+```bash
+sudo piaware-config receiver-type other
+sudo piaware-config receiver-host 127.0.0.1
+sudo piaware-config receiver-port 30005     # see the port note below
+sudo systemctl restart piaware
+```
+
+> **Port gotcha:** `30005` is right on macOS with this repo's config. On a Pi running
+> wiedehopf's readsb, Beast is on **20005** — the same 300xx → 200xx shift that moves
+> SBS-1 to 20003. Check `/etc/default/readsb` before assuming.
+
+Then claim the receiver to your account:
+
+```bash
+cat /var/cache/piaware/feeder_id
+# open https://www.flightaware.com/adsb/piaware/claim/<that-id>
+```
+
+Feeding FlightAware earns a free Enterprise account (they list it at $99.95/mo).
+
+`receiver-type` accepts `rtlsdr, beast, radarcape, relay, other`; `receiver-host` and
+`receiver-port` apply to `relay` and `other`. **MLAT** comes along with piaware but needs
+your receiver's exact coordinates set on FlightAware's site to contribute.
 
 ### The WDGWars feeder (optional)
 
@@ -197,6 +239,7 @@ unit.
 | Gain | `GAIN=auto ./install.sh` | Or a fixed value from the tuner's table: `49.6 44.5 40.2 36.4 32.8`. Higher isn't automatically better — a strong nearby transmitter can overload the front end. |
 | Receiver location | add `--lat`/`--lon` to the readsb args | Optional. Centers the map and enables range rings. |
 | Upload interval | `INTERVAL=3600 ./install.sh` | Seconds. |
+| Beast port | `BEAST_PORT=30005 ./install.sh` | What vendor feeder clients read. |
 | Map port | `HTTP_PORT=8080 ./install.sh` | Bound to `127.0.0.1` deliberately. |
 | CPU load | `PREAMBLE=75 ./install.sh` | `--preamble-threshold`. readsb's own help: *"lower threshold → more CPU usage (default: 58, pi zero / pi 1: 75, hot CPU 42)"*. Raising it trades a little sensitivity for noticeably less CPU. **readsb has no sample-rate option** — this is the knob. |
 
