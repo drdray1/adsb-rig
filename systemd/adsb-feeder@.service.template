@@ -1,0 +1,37 @@
+[Unit]
+# OPTIONAL WDGWars feeder for Linux / Raspberry Pi.
+#
+# Instantiated unit: %i is the SBS-1 source as host:port, so the same unit file
+# covers both port conventions without editing:
+#
+#   systemctl --user enable --now adsb-feeder@localhost:20003.service   # wiedehopf readsb (Pi)
+#   systemctl --user enable --now adsb-feeder@localhost:30003.service   # dump1090 convention
+#
+# Pattern follows Muninn's own systemd/muninn-stream@.service.
+#
+# Headless Pi: user units only run without an active login if lingering is on:
+#   sudo loginctl enable-linger $USER
+#
+# Requires an API key saved separately (never stored in this unit):
+#   ~/adsb/muninn/.venv/bin/python ~/adsb/muninn/muninn.py --save-key 'YOUR_KEY'
+Description=ADS-B feeder to WDGWars via Muninn (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/adsb/muninn/.venv/bin/python %h/adsb/muninn/muninn.py \
+    --stream %i --upload --no-save --stream-interval __INTERVAL__
+Restart=always
+RestartSec=30s
+
+# The feeder needs no privileges. Kept deliberately mild because this unit has
+# not been exercised on a real Pi — stricter sandboxing (ProtectSystem=strict,
+# ProtectHome=read-only + ReadWritePaths=%h/.config/muninn) works in principle but
+# can fail in ways that are annoying to debug remotely. Add it once it's running.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

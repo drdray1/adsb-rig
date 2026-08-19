@@ -1,0 +1,30 @@
+# Third-party checkouts — install.sh fetches these
+muninn/
+tar1090/
+
+# Captured aircraft observations. These carry positions and timestamps that
+# reveal where the receiver is. Never commit them.
+captures/
+logs/
+*.csv
+*.gz
+*.json.gz
+
+# Aircraft registration database (8 MB, re-downloadable)
+aircraft.csv.gz
+
+# Rendered from launchd/ and systemd/ templates by install.sh — machine-specific
+*.plist
+!launchd/*.plist.template
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Never
+*.key
+*.secret
+.env
+.DS_Store
+*.swp

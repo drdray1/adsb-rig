@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+# adsb-ctl — control the local ADS-B station on macOS (launchd) or Linux (systemd).
+#
+#   adsb-ctl start|stop|restart|status|logs [service]
+#
+# `stop` is how you release the SDR for other software (SDR++, GQRX, ...) —
+# only one process can hold the dongle.
+#
+# Written for bash 3.2 (macOS ships 2007-era bash): no associative arrays, and
+# empty arrays are never expanded bare under `set -u`.
+set -euo pipefail
+
+CONFIG="${ADSB_RIG_CONFIG:-$HOME/.config/adsb-rig/env}"
+# shellcheck source=/dev/null
+[ -f "$CONFIG" ] && . "$CONFIG"
+
+SBS_PORT="${SBS_PORT:-30003}"
+HTTP_PORT="${HTTP_PORT:-8080}"
+LOG_DIR="${LOG_DIR:-$HOME/adsb/logs}"
+PREFIX="${PREFIX:-com.drdray1.adsb}"
+FEEDER_INSTANCE="${FEEDER_INSTANCE:-localhost:$SBS_PORT}"
+
+if command -v launchctl >/dev/null 2>&1 && [ "$(uname -s)" = "Darwin" ]; then
+  PLATFORM=macos
+elif command -v systemctl >/dev/null 2>&1; then
+  PLATFORM=linux
+else
+  echo "adsb-ctl: no launchctl or systemctl found — unsupported platform." >&2
+  exit 2
+fi
+
+AGENTS_DIR="$HOME/Library/LaunchAgents"
+DOMAIN="gui/$(id -u)"
+
+usage() {
+  cat >&2 <<EOF
+usage: adsb-ctl start|stop|restart|status|logs [service]
+
+  macOS services: readsb, web, muninn  (only those installed are managed)
+  Linux:          the feeder is managed here; readsb/tar1090 are system
+                  services managed by their own installers.
+EOF
+  exit 2
+}
+
+# Services whose unit files actually exist. Keeps a map-only install working
+# and makes the WDGWars feeder genuinely optional.
+installed_services() {
+  local s
+  for s in readsb web muninn; do
+    [ -f "$AGENTS_DIR/$PREFIX.$s.plist" ] && echo "$s"
+  done
+  return 0
+}
+
+port_state() {  # $1=port $2=label
+  if nc -z localhost "$1" >/dev/null 2>&1; then
+    printf "  %-12s %s\n" "$2" "open (:$1)"
+  else
+    printf "  %-12s %s\n" "$2" "closed (:$1)"
+  fi
+}
+
+aircraft_state() {
+  local json
+  json=$(curl -s --max-time 3 "localhost:$HTTP_PORT/data/aircraft.json" 2>/dev/null) || return 0
+  [ -z "$json" ] && return 0
+  printf '%s' "$json" | python3 -c "
+import json,sys
+try:
+    a=json.load(sys.stdin)['aircraft']
+    print(f\"  {'aircraft':12} {len(a)} tracked, {sum(1 for x in a if 'lat' in x)} with position\")
+except Exception:
+    pass
+" 2>/dev/null || true
+}
+
+## ---------- macOS ----------
+
+macos_start() {
+  mkdir -p "$LOG_DIR"
+  local svc found=0
+  for svc in $(installed_services); do
+    found=1
+    if launchctl bootstrap "$DOMAIN" "$AGENTS_DIR/$PREFIX.$svc.plist" 2>/dev/null; then
+      echo "  started        $svc"
+    else
+      echo "  already up     $svc"
+    fi
+  done
+  [ "$found" -eq 0 ] && echo "  nothing installed — run ./install.sh first" >&2
+  return 0
+}
+
+macos_stop() {
+  local svc found=0
+  for svc in $(installed_services); do
+    found=1
+    if launchctl bootout "$DOMAIN/$PREFIX.$svc" 2>/dev/null; then
+      echo "  stopped        $svc"
+    else
+      echo "  not running    $svc"
+    fi
+  done
+  [ "$found" -eq 0 ] && echo "  nothing installed" >&2
+  echo
+  echo "SDR released — other radio software can use the dongle now."
+  return 0
+}
+
+macos_status() {
+  local svc pid
+  for svc in readsb web muninn; do
+    printf "  %-12s " "$svc"
+    if [ ! -f "$AGENTS_DIR/$PREFIX.$svc.plist" ]; then
+      echo "not installed"
+    elif launchctl print "$DOMAIN/$PREFIX.$svc" >/dev/null 2>&1; then
+      pid=$(launchctl print "$DOMAIN/$PREFIX.$svc" 2>/dev/null | awk '/^\tpid = /{print $3; exit}')
+      if [ -n "${pid:-}" ]; then echo "running (pid $pid)"; else echo "loaded, not running"; fi
+    else
+      echo "not loaded"
+    fi
+  done
+}
+
+macos_logs() {
+  local svc="${1:-}"
+  if [ -n "$svc" ]; then tail -f "$LOG_DIR/$svc.log"; else tail -n 20 -f "$LOG_DIR"/*.log; fi
+}
+
+## ---------- Linux ----------
+# readsb and tar1090 are installed and managed by their own upstream installers
+# (wiedehopf's). We report their state but never start, stop, or reconfigure them.
+
+FEEDER_UNIT="adsb-feeder@${FEEDER_INSTANCE}.service"
+
+linux_start() {
+  mkdir -p "$LOG_DIR"
+  if systemctl --user list-unit-files 'adsb-feeder@*' >/dev/null 2>&1; then
+    systemctl --user start "$FEEDER_UNIT" && echo "  started        $FEEDER_UNIT"
+  else
+    echo "  feeder not installed — run ./install.sh to add it" >&2
+  fi
+  echo
+  echo "readsb / tar1090 are system services; use systemctl if you need them:"
+  echo "  sudo systemctl start readsb tar1090"
+  return 0
+}
+
+linux_stop() {
+  systemctl --user stop "$FEEDER_UNIT" 2>/dev/null && echo "  stopped        $FEEDER_UNIT" \
+    || echo "  not running    $FEEDER_UNIT"
+  echo
+  echo "readsb still holds the SDR (system service). To release it:"
+  echo "  sudo systemctl stop readsb"
+  return 0
+}
+
+linux_status() {
+  local u
+  for u in readsb tar1090; do
+    printf "  %-12s %s (system)\n" "$u" "$(systemctl is-active "$u" 2>/dev/null || echo 'not installed')"
+  done
+  printf "  %-12s %s (user)\n" "feeder" "$(systemctl --user is-active "$FEEDER_UNIT" 2>/dev/null || echo 'inactive')"
+}
+
+linux_logs() {
+  local svc="${1:-}"
+  case "$svc" in
+    readsb|tar1090) journalctl -u "$svc" -f ;;
+    ""|feeder|muninn) journalctl --user -u "$FEEDER_UNIT" -f ;;
+    *) echo "unknown service: $svc" >&2; exit 2 ;;
+  esac
+}
+
+## ---------- dispatch ----------
+
+do_status() {
+  echo "platform: $PLATFORM"
+  echo
+  "${PLATFORM}_status"
+  echo
+  port_state "$SBS_PORT" "SBS-1"
+  port_state "$HTTP_PORT" "map"
+  aircraft_state
+}
+
+case "${1:-}" in
+  start)   "${PLATFORM}_start" ;;
+  stop)    "${PLATFORM}_stop" ;;
+  restart) "${PLATFORM}_stop" || true; sleep 2; "${PLATFORM}_start" ;;
+  status)  do_status ;;
+  logs)    "${PLATFORM}_logs" "${2:-}" ;;
+  *)       usage ;;
+esac

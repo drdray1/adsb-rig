@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  OPTIONAL feeder — only installed if you opt in. Uploads aircraft to WDGWars
+  via Muninn. The rest of the rig (decoder + map) works without it.
+
+  Requires an API key saved separately:
+    ~/adsb/muninn/.venv/bin/python ~/adsb/muninn/muninn.py --save-key 'YOUR_KEY'
+  The key lives at ~/.config/muninn/api.key (0600) and is never stored here.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.drdray1.adsb.muninn</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__HOME__/adsb/muninn/.venv/bin/python</string>
+		<string>__HOME__/adsb/muninn/muninn.py</string>
+		<string>--stream</string>
+		<string>localhost:__SBS_PORT__</string>
+		<string>--upload</string>
+		<!-- Don't write a JSON file per flush. -->
+		<string>--no-save</string>
+		<!-- Muninn buffers changed aircraft and uploads only when there are new
+		     ones, so a quiet interval sends nothing. A process restart loses up to
+		     one interval's worth of buffered aircraft — lower this if that matters. -->
+		<string>--stream-interval</string>
+		<string>__INTERVAL__</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- Without this, Python block-buffers stdout to the log file and the
+		     agent looks dead for long stretches. -->
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>WorkingDirectory</key>
+	<string>__HOME__/adsb/muninn</string>
+	<key>StandardOutPath</key>
+	<string>__HOME__/adsb/logs/muninn.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/adsb/logs/muninn.log</string>
+</dict>
+</plist>

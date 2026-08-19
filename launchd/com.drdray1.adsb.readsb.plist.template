@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Rendered by install.sh; placeholders are substituted with real values.
+  Edit this template, not the copy in ~/Library/LaunchAgents, then re-run install.sh.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.drdray1.adsb.readsb</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__READSB__</string>
+		<string>--device-type</string>
+		<string>rtlsdr</string>
+		<string>--gain</string>
+		<string>__GAIN__</string>
+		<string>--write-json</string>
+		<string>__HOME__/adsb/tar1090/html/data</string>
+		<string>--write-json-every</string>
+		<string>1</string>
+		<string>--db-file</string>
+		<string>__HOME__/adsb/aircraft.csv.gz</string>
+		<string>--net</string>
+		<string>--net-sbs-port</string>
+		<string>__SBS_PORT__</string>
+		<string>--quiet</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>WorkingDirectory</key>
+	<string>__HOME__/adsb</string>
+	<key>StandardOutPath</key>
+	<string>__HOME__/adsb/logs/readsb.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/adsb/logs/readsb.log</string>
+</dict>
+</plist>
