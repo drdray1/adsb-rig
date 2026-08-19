@@ -22,6 +22,9 @@ aircraft.csv.gz
 __pycache__/
 *.pyc
 
+# Your active feed list — machine-specific. Ship only the example.
+feeds.conf
+
 # Never
 *.key
 *.secret

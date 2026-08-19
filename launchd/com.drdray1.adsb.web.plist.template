@@ -3,7 +3,7 @@
 <!--
   Rendered by install.sh; placeholders are substituted with real values.
   Bound to 127.0.0.1 on purpose — this is a local map, not a LAN service.
-  Change --bind to 0.0.0.0 only if you actually want it reachable from the network.
+  Change the bind address to 0.0.0.0 only if you actually want it reachable from the network.
 -->
 <plist version="1.0">
 <dict>

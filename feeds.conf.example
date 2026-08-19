@@ -1,0 +1,48 @@
+# feeds.conf — extra places to send your ADS-B data.
+#
+# Copy to feeds.conf and uncomment the ones you want:
+#     cp feeds.conf.example feeds.conf
+#     ./install.sh
+#
+# Each active line becomes a readsb --net-connector. readsb opens an outbound
+# connection per destination, so nothing needs to be exposed to the internet
+# and no inbound firewall rules are required.
+#
+# Format:  <host>  <port>  <protocol>
+#
+# Protocol is almost always beast_reduce_plus_out — Beast format with reduced
+# throughput plus the UUID that identifies your receiver. install.sh generates
+# a UUID once and stores it at ~/.config/adsb-rig/uuid.
+#
+# Endpoints below are from the sdr-enthusiasts ultrafeeder project and were
+# verified to accept a connection at the time of writing. Aggregators do move
+# hosts occasionally — check the service's own docs if one stops connecting.
+
+# --- Non-profit / community aggregators. No account or key needed. ---
+
+# feed.airplanes.live      30004   beast_reduce_plus_out
+# feed.adsb.fi             30004   beast_reduce_plus_out
+# in.adsb.lol              30004   beast_reduce_plus_out
+# feed.planespotters.net   30004   beast_reduce_plus_out
+# feed.theairtraffic.com   30004   beast_reduce_plus_out
+
+# --- ADSBExchange. Community-run, unfiltered. ---
+
+# feed1.adsbexchange.com   30004   beast_reduce_plus_out
+
+# --- Others that appear in the ultrafeeder list ---
+
+# data.avdelphi.com        24999   beast_reduce_plus_out
+# dati.flyitalyadsb.com    4905    beast_reduce_plus_out
+
+#
+# NOT handled here:
+#
+#   MLAT (multilateration) needs a separate mlat-client daemon and your exact
+#   receiver coordinates. The ports above are ADS-B only.
+#
+#   FlightAware (piaware), FlightRadar24 (fr24feed), RadarBox and PlaneFinder
+#   run their own feeder clients with their own accounts and keys. Point them
+#   at this rig's Beast output rather than adding them here — enable
+#   --net-bo-port 30005 on readsb and configure their client to read from
+#   localhost:30005.

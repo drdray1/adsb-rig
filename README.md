@@ -10,6 +10,7 @@ unless you explicitly turn on a feeder.
 ```
 RTL-SDR dongle ──> readsb ──┬──> tar1090 map          http://localhost:8080
                             ├──> SBS-1 TCP :30003     any consumer you like
+                            ├──> aggregators         adsb.fi, airplanes.live, ...
                             └──> optional feeder ──>  WDGWars (via Muninn)
 ```
 
@@ -18,7 +19,8 @@ RTL-SDR dongle ──> readsb ──┬──> tar1090 map          http://local
 - An RTL-SDR dongle. Developed against a **NooElec NESDR SMArt v5** (RTL2832U + R820T).
 - A 1090 MHz antenna. A quarter wave is only **~6.9 cm** — the stubby whip in most kits is
   close to ideal here, unlike at FM/airband frequencies where it's far too short.
-- macOS with Homebrew, or a Raspberry Pi (4/5 recommended) running Raspberry Pi OS.
+- macOS with Homebrew, or a Raspberry Pi running Raspberry Pi OS. A Pi 4/5 is
+  comfortable; a Pi Zero 2 W works with caveats (see below).
 
 Reception is dominated by antenna placement, not software. ADS-B is line-of-sight: a window
 with open sky beats any amount of gain tuning, and getting the dongle away from USB 3 ports
@@ -59,6 +61,25 @@ only the feeder as a systemd **user** unit.
 > **Heads up:** the Linux path is written but has **not been run on real hardware** yet.
 > The shell logic, port detection, and unit rendering are tested; an actual Pi install
 > isn't. Reports welcome.
+
+#### Raspberry Pi Zero 2 W
+
+It works, but the Zero 2 W has real constraints — worth knowing before you build on one:
+
+- **Use Raspberry Pi OS Lite (64-bit).** 512 MB of RAM is the binding limit. readsb, the
+  map and the feeder fit comfortably; a desktop on top does not.
+- **Power is the most common failure.** An RTL-SDR pulls ~300 mA, and the Zero 2 W feeds it
+  through a single micro-USB OTG port. Use a solid 2.5 A+ supply, and a *powered* hub if
+  you add anything else. Brownouts show up as the dongle vanishing mid-run, which reads
+  like a software fault but isn't.
+- **CPU:** the quad-core Cortex-A53 handles 1090 MHz decoding fine — unlike the original
+  Zero W, which is single-core ARMv6 and genuinely marginal. If it runs hot or you're
+  sharing the board with other work, install with `PREAMBLE=75`.
+- **SD card wear:** readsb writes JSON every second. On Linux, wiedehopf's packaging
+  already points that at `/run` (tmpfs, in RAM), so the card isn't hammered. Don't
+  "helpfully" redirect it onto the card.
+- **2.4 GHz Wi-Fi only.** Fine for this — the upstream data rate is tiny — but the radio
+  sits close to the dongle, so keep the antenna away from the board.
 
 ## Usage
 
@@ -109,6 +130,45 @@ Anything local can also just read `tar1090/html/data/aircraft.json`.
 > On a Pi, wiedehopf's packaging shifts the whole port range: SBS-1 is on **20003**, not
 > 30003. `install.sh` reads `/etc/default/readsb` and probes rather than assuming.
 
+### Feeding aggregators
+
+Copy `feeds.conf.example` to `feeds.conf`, uncomment what you want, and re-run
+`./install.sh`. Each active line becomes a readsb `--net-connector`, so readsb dials
+**out** — nothing is exposed to the internet and no inbound firewall rules are needed.
+
+```
+feed.adsb.fi             30004   beast_reduce_plus_out
+feed.airplanes.live      30004   beast_reduce_plus_out
+```
+
+`install.sh` generates a UUID once at `~/.config/adsb-rig/uuid` and passes it with
+`--uuid`, so your receiver identity stays stable across reinstalls.
+
+| Service | Host | Port | Type |
+|---|---|---|---|
+| Airplanes.live | `feed.airplanes.live` | 30004 | non-profit |
+| ADSB.fi | `feed.adsb.fi` | 30004 | non-profit |
+| ADSB.lol | `in.adsb.lol` | 30004 | non-profit |
+| Planespotters | `feed.planespotters.net` | 30004 | non-profit |
+| The Air Traffic | `feed.theairtraffic.com` | 30004 | non-profit |
+| ADSBExchange | `feed1.adsbexchange.com` | 30004 | community |
+| AVDelphi | `data.avdelphi.com` | 24999 | — |
+| Fly Italy ADSB | `dati.flyitalyadsb.com` | 4905 | — |
+
+All use `beast_reduce_plus_out` — Beast format with reduced throughput plus the UUID,
+which is what these services expect. Endpoints come from the
+[sdr-enthusiasts ultrafeeder](https://github.com/sdr-enthusiasts/docker-adsb-ultrafeeder)
+project; `feed.adsb.fi:30004` was verified to accept a live connection. Aggregators do move
+hosts occasionally, so check their own docs if one stops connecting.
+
+**Not covered here:**
+
+- **MLAT** needs a separate `mlat-client` daemon and your exact coordinates. The ports
+  above are ADS-B only.
+- **FlightAware, FlightRadar24, RadarBox, PlaneFinder** run their own feeder clients with
+  their own accounts and keys. Rather than adding them to `feeds.conf`, enable
+  `--net-bo-port 30005` on readsb and point their client at `localhost:30005`.
+
 ### The WDGWars feeder (optional)
 
 [WDGWars](https://wdgwars.pl) is a real-world wardriving/hacking game that accepts ADS-B
@@ -138,7 +198,7 @@ unit.
 | Receiver location | add `--lat`/`--lon` to the readsb args | Optional. Centers the map and enables range rings. |
 | Upload interval | `INTERVAL=3600 ./install.sh` | Seconds. |
 | Map port | `HTTP_PORT=8080 ./install.sh` | Bound to `127.0.0.1` deliberately. |
-| Pi Zero W | reduce sample rate | Single-core ARMv6 struggles at 2.4 MSPS; try 1.2. A Pi 4/5 has ample headroom. |
+| CPU load | `PREAMBLE=75 ./install.sh` | `--preamble-threshold`. readsb's own help: *"lower threshold → more CPU usage (default: 58, pi zero / pi 1: 75, hot CPU 42)"*. Raising it trades a little sensitivity for noticeably less CPU. **readsb has no sample-rate option** — this is the knob. |
 
 ## Troubleshooting
 

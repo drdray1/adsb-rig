@@ -5,7 +5,7 @@
   via Muninn. The rest of the rig (decoder + map) works without it.
 
   Requires an API key saved separately:
-    ~/adsb/muninn/.venv/bin/python ~/adsb/muninn/muninn.py --save-key 'YOUR_KEY'
+    ~/adsb/muninn/.venv/bin/python ~/adsb/muninn/muninn.py (see README: save-key)
   The key lives at ~/.config/muninn/api.key (0600) and is never stored here.
 -->
 <plist version="1.0">

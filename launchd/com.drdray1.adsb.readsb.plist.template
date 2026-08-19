@@ -25,6 +25,10 @@
 		<string>--net-sbs-port</string>
 		<string>__SBS_PORT__</string>
 		<string>--quiet</string>
+		<!-- install.sh replaces the next line with one net-connector pair per
+		     active entry in feeds.conf, plus the uuid flag. Removed entirely if there
+		     are none. Do not reformat this marker. -->
+		__CONNECTORS__
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

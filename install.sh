@@ -146,11 +146,78 @@ if [ "$WANT_FEEDER" = yes ]; then
   "$RIG_DIR/muninn/.venv/bin/pip" install -q -r "$RIG_DIR/muninn/requirements.txt"
 fi
 
-## ---------------------------------------------------------------- render units
+## ---------------------------------------------------------------- extra feeds
 
 mkdir -p "$LOG_DIR" "$CONFIG_DIR"
 
+# A UUID identifies this receiver to aggregators using beast_reduce_plus_out.
+# Generated once and reused, so your feeder identity is stable across installs.
+UUID_FILE="$CONFIG_DIR/uuid"
+if [ ! -f "$UUID_FILE" ]; then
+  if [ -r /proc/sys/kernel/random/uuid ]; then
+    cat /proc/sys/kernel/random/uuid > "$UUID_FILE"
+  else
+    python3 -c 'import uuid;print(uuid.uuid4())' > "$UUID_FILE"
+  fi
+  chmod 600 "$UUID_FILE"
+fi
+UUID="$(cat "$UUID_FILE")"
+
+# Build the <string> entries for readsb's --net-connector args, one pair per
+# active feeds.conf line. Written to a temp file that sed splices into the plist.
+CONNECTOR_XML="$(mktemp)"
+FEED_COUNT=0
+if [ -f "$RIG_DIR/feeds.conf" ]; then
+  while read -r host port proto rest; do
+    case "${host:-}" in ''|\#*) continue ;; esac
+    [ -z "${port:-}" ] && continue
+    [ -z "${proto:-}" ] && proto=beast_reduce_plus_out
+    {
+      printf '\t\t<string>--net-connector</string>\n'
+      printf '\t\t<string>%s,%s,%s</string>\n' "$host" "$port" "$proto"
+    } >> "$CONNECTOR_XML"
+    FEED_COUNT=$((FEED_COUNT + 1))
+    echo "  feeding $host:$port ($proto)"
+  done < "$RIG_DIR/feeds.conf"
+fi
+
+if [ "$FEED_COUNT" -gt 0 ]; then
+  say "Extra feeds: $FEED_COUNT"
+  {
+    printf '\t\t<string>--uuid</string>\n'
+    printf '\t\t<string>%s</string>\n' "$UUID"
+  } >> "$CONNECTOR_XML"
+elif [ -f "$RIG_DIR/feeds.conf" ]; then
+  echo "  feeds.conf has no active entries (all commented out)"
+fi
+
+# CPU relief for weak boards. readsb documents this itself: "lower threshold ->
+# more CPU usage (default: 58, pi zero / pi 1: 75, hot CPU 42)". readsb has no
+# sample-rate knob — this is the one that matters.
+if [ -n "${PREAMBLE:-}" ]; then
+  {
+    printf '\t\t<string>--preamble-threshold</string>\n'
+    printf '\t\t<string>%s</string>\n' "$PREAMBLE"
+  } >> "$CONNECTOR_XML"
+  echo "  preamble-threshold $PREAMBLE"
+fi
+
+## ---------------------------------------------------------------- render units
+
+# plutil -lint accepts XML that stricter parsers reject (notably "--" inside an
+# XML comment, which is illegal). Validate with a real XML parser too.
+validate_plist() {
+  plutil -lint "$1" >/dev/null || die "invalid plist: $1"
+  python3 - "$1" <<'PYEOF' || die "plist is not well-formed XML: $1"
+import plistlib, sys
+with open(sys.argv[1], 'rb') as fh:
+    plistlib.load(fh)
+PYEOF
+}
+
 render() {  # $1=template $2=dest
+  # `r` splices the connector XML in after the marker line, `d` then deletes the
+  # marker itself — sed still emits the read file, so the order is correct.
   sed -e "s|__HOME__|$HOME|g" \
       -e "s|__READSB__|$READSB_BIN|g" \
       -e "s|__PYTHON__|$PYTHON_BIN|g" \
@@ -158,6 +225,8 @@ render() {  # $1=template $2=dest
       -e "s|__HTTP_PORT__|$HTTP_PORT|g" \
       -e "s|__INTERVAL__|$INTERVAL|g" \
       -e "s|__GAIN__|$GAIN|g" \
+      -e "/__CONNECTORS__/r $CONNECTOR_XML" \
+      -e "/__CONNECTORS__/d" \
       "$1" > "$2"
 }
 
@@ -176,12 +245,12 @@ if [ "$PLATFORM" = macos ]; then
   say "Installing launchd agents"
   for svc in readsb web; do
     render "$RIG_DIR/launchd/$PREFIX.$svc.plist.template" "$AGENTS/$PREFIX.$svc.plist"
-    plutil -lint "$AGENTS/$PREFIX.$svc.plist" >/dev/null
+    validate_plist "$AGENTS/$PREFIX.$svc.plist"
     echo "  $PREFIX.$svc.plist"
   done
   if [ "$WANT_FEEDER" = yes ]; then
     render "$RIG_DIR/launchd/$PREFIX.muninn.plist.template" "$AGENTS/$PREFIX.muninn.plist"
-    plutil -lint "$AGENTS/$PREFIX.muninn.plist" >/dev/null
+    validate_plist "$AGENTS/$PREFIX.muninn.plist"
     echo "  $PREFIX.muninn.plist"
   fi
 else
