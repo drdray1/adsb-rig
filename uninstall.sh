@@ -16,7 +16,7 @@ case "$(uname -s)" in
   Darwin)
     DOMAIN="gui/$(id -u)"
     AGENTS="$HOME/Library/LaunchAgents"
-    for svc in readsb web muninn; do
+    for svc in readsb web muninn watchdog; do
       launchctl bootout "$DOMAIN/$PREFIX.$svc" 2>/dev/null && echo "  stopped  $svc" || true
       if [ -f "$AGENTS/$PREFIX.$svc.plist" ]; then
         rm -f "$AGENTS/$PREFIX.$svc.plist"
