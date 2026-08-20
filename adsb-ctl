@@ -174,7 +174,9 @@ linux_status() {
   # `systemctl is-active` prints its verdict AND exits non-zero when inactive.
   # A `|| echo inactive` fallback therefore appends a SECOND line, which printf
   # then splits across the output. Take the first line and never fall back.
-  u=$(systemctl --user is-active "$FEEDER_UNIT" 2>/dev/null | head -1)
+  # `|| true` is load-bearing: is-active exits non-zero when inactive, and under
+  # `set -euo pipefail` that would abort the whole status report mid-way.
+  u=$(systemctl --user is-active "$FEEDER_UNIT" 2>/dev/null | head -1) || true
   printf "  %-12s %s (user)\n" "feeder" "${u:-inactive}"
 }
 
