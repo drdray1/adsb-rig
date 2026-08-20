@@ -219,7 +219,15 @@ linux_logs() {
   local svc="${1:-}"
   case "$svc" in
     readsb|tar1090) journalctl -u "$svc" -f ;;
-    ""|feeder|muninn) journalctl --user -u "$FEEDER_UNIT" -f ;;
+    ""|feeder|muninn)
+      # A systemd *user* service logs into the SYSTEM journal unless a separate
+      # per-user journal exists, and `journalctl --user -u` then reports "No
+      # journal files were found" even though the logs are right there. Matching
+      # on _SYSTEMD_USER_UNIT finds them under either layout. Needs adm or
+      # systemd-journal group membership to read.
+      journalctl _SYSTEMD_USER_UNIT="$FEEDER_UNIT" -f 2>/dev/null \
+        || journalctl --user -u "$FEEDER_UNIT" -f
+      ;;
     *) echo "unknown service: $svc" >&2; exit 2 ;;
   esac
 }
