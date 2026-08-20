@@ -63,17 +63,31 @@ port_state() {  # $1=port $2=label
 }
 
 aircraft_state() {
-  local json
-  json=$(curl -s --max-time 3 "localhost:$HTTP_PORT/data/aircraft.json" 2>/dev/null) || return 0
+  local json f
+  # Prefer readsb's json on disk. On Linux nothing listens on HTTP_PORT at all
+  # (tar1090 is served by lighttpd on :80), so the curl always failed and the
+  # count silently never appeared.
+  json=""
+  for f in "${DATA_DIR:-}/aircraft.json" /run/readsb/aircraft.json \
+           "$HOME/adsb/tar1090/html/data/aircraft.json"; do
+    [ "$f" = "/aircraft.json" ] && continue     # DATA_DIR unset
+    [ -f "$f" ] && { json=$(cat "$f" 2>/dev/null || true); break; }
+  done
+  [ -z "$json" ] && json=$(curl -s --max-time 3 "localhost:$HTTP_PORT/data/aircraft.json" 2>/dev/null || true)
   [ -z "$json" ] && return 0
-  printf '%s' "$json" | python3 -c "
-import json,sys
+  # Single-quoted so the Python can use double quotes without escaping.
+  printf '%s' "$json" | python3 -c '
+import json, sys
 try:
-    a=json.load(sys.stdin)['aircraft']
-    print(f\"  {'aircraft':12} {len(a)} tracked, {sum(1 for x in a if 'lat' in x)} with position\")
+    a = json.load(sys.stdin)["aircraft"]
+    pos = sum(1 for x in a if "lat" in x)
+    print("  %-12s %d tracked, %d with position" % ("aircraft", len(a), pos))
+    d = sorted(x["r_dst"] for x in a if x.get("r_dst") is not None)
+    if d:
+        print("  %-12s %.1f - %.1f nm" % ("range", d[0], d[-1]))
 except Exception:
     pass
-" 2>/dev/null || true
+' 2>/dev/null || true
 }
 
 ## ---------- macOS ----------
