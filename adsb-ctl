@@ -161,7 +161,12 @@ FEEDER_UNIT="adsb-feeder@${FEEDER_INSTANCE}.service"
 linux_start() {
   mkdir -p "$LOG_DIR"
   if systemctl --user list-unit-files 'adsb-feeder@*' >/dev/null 2>&1; then
-    systemctl --user start "$FEEDER_UNIT" && echo "  started        $FEEDER_UNIT"
+    # `enable --now`, not plain `start`: on Linux those are separate, and a
+    # bare start does not survive a reboot. macOS gets this for free because
+    # `launchctl bootstrap` plus RunAtLoad both starts and persists.
+    systemctl --user enable --now "$FEEDER_UNIT" >/dev/null 2>&1 \
+      && echo "  started        $FEEDER_UNIT (enabled at boot)" \
+      || echo "  failed to start $FEEDER_UNIT" >&2
   else
     echo "  feeder not installed — run ./install.sh to add it" >&2
   fi
@@ -172,6 +177,9 @@ linux_start() {
 }
 
 linux_stop() {
+  # `stop`, not `disable`: stopping is meant to be temporary (freeing the SDR),
+  # and a reboot should bring the feeder back -- same as macOS, where bootout
+  # lasts only until the next login.
   systemctl --user stop "$FEEDER_UNIT" 2>/dev/null && echo "  stopped        $FEEDER_UNIT" \
     || echo "  not running    $FEEDER_UNIT"
   echo
