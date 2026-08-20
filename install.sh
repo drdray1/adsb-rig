@@ -100,8 +100,10 @@ EOF
   READSB_BIN="$(command -v readsb || echo /usr/bin/readsb)"
 fi
 
-# Never assume the SBS-1 port. wiedehopf's Linux packaging shifts the whole
-# 300xx range down to 200xx, so 20003 is normal on a Pi and 30003 is not.
+# Never assume the SBS-1 port. A stock wiedehopf install uses 30003 (verified on
+# a Pi 4 / Debian 13); it only shifts to 20003 when installed with the
+# `push-30004` argument, which lets readsb coexist with an existing dump1090-fa.
+# Read the config first, probe second.
 detect_sbs_port() {
   local p
   if [ -f /etc/default/readsb ]; then
@@ -132,7 +134,10 @@ if [ "$PLATFORM" = macos ] || [ ! -d /usr/local/share/tar1090 ]; then
   mkdir -p "$RIG_DIR/tar1090/html/data"
 fi
 
-if [ ! -f "$RIG_DIR/aircraft.csv.gz" ]; then
+# Only needed for the readsb instance this repo launches (macOS). On Linux
+# readsb is a system service that already has its own database from wiedehopf's
+# installer -- downloading 8 MB here would be dead weight.
+if [ "$PLATFORM" = macos ] && [ ! -f "$RIG_DIR/aircraft.csv.gz" ]; then
   say "Fetching aircraft database (hex -> registration/type)"
   curl -L --fail -o "$RIG_DIR/aircraft.csv.gz" "$DB_URL"
 fi
@@ -313,6 +318,13 @@ if [ "$WANT_FEEDER" = yes ]; then
 EOF
 fi
 
+if [ "$PLATFORM" = macos ]; then
+  MAP_URL="http://localhost:$HTTP_PORT"
+else
+  # tar1090 via lighttpd, installed by wiedehopf's script -- not by us.
+  MAP_URL="http://$(hostname -I 2>/dev/null | awk '{print $1}')/tar1090"
+fi
+
 cat <<EOF
 
  Then start everything:
@@ -320,5 +332,5 @@ cat <<EOF
    $RIG_DIR/adsb-ctl start
    $RIG_DIR/adsb-ctl status
 
- Map: http://localhost:$HTTP_PORT
+ Map: $MAP_URL
 EOF

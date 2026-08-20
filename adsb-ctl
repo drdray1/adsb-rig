@@ -171,7 +171,24 @@ linux_status() {
   for u in readsb tar1090; do
     printf "  %-12s %s (system)\n" "$u" "$(systemctl is-active "$u" 2>/dev/null || echo 'not installed')"
   done
-  printf "  %-12s %s (user)\n" "feeder" "$(systemctl --user is-active "$FEEDER_UNIT" 2>/dev/null || echo 'inactive')"
+  # `systemctl is-active` prints its verdict AND exits non-zero when inactive.
+  # A `|| echo inactive` fallback therefore appends a SECOND line, which printf
+  # then splits across the output. Take the first line and never fall back.
+  u=$(systemctl --user is-active "$FEEDER_UNIT" 2>/dev/null | head -1)
+  printf "  %-12s %s (user)\n" "feeder" "${u:-inactive}"
+}
+
+# On Linux the map is tar1090 served by lighttpd on port 80, installed by
+# wiedehopf's script -- this repo does not run a web server there. Report where
+# the map actually is instead of probing a port nothing listens on.
+linux_map_state() {
+  local host
+  host=$(hostname -I 2>/dev/null | awk '{print $1}')
+  if nc -z localhost 80 >/dev/null 2>&1; then
+    printf "  %-12s %s\n" "map" "open (http://${host:-localhost}/tar1090)"
+  else
+    printf "  %-12s %s\n" "map" "closed (lighttpd not running)"
+  fi
 }
 
 linux_logs() {
@@ -192,7 +209,11 @@ do_status() {
   echo
   port_state "$SBS_PORT" "SBS-1"
   port_state "$BEAST_PORT" "Beast"
-  port_state "$HTTP_PORT" "map"
+  if [ "$PLATFORM" = linux ]; then
+    linux_map_state
+  else
+    port_state "$HTTP_PORT" "map"
+  fi
   aircraft_state
 }
 

@@ -59,9 +59,14 @@ cd ~/adsb && ./install.sh
 It detects the existing readsb, finds which SBS-1 port it actually serves, and installs
 only the feeder as a systemd **user** unit.
 
-> **Heads up:** the Linux path is written but has **not been run on real hardware** yet.
-> The shell logic, port detection, and unit rendering are tested; an actual Pi install
-> isn't. Reports welcome.
+> **Verified on hardware:** Raspberry Pi 4 Model B (2 GB), Debian 13 trixie, aarch64,
+> kernel 6.12 — full install, port detection, and `adsb-ctl` all exercised. Other boards
+> and distributions are untested; reports welcome.
+>
+> Two things that surprised us on that first real run, both now handled: the ports are
+> **300xx, not 200xx** (see below), and the DVB-T kernel modules (`dvb_usb_rtl28xxu`,
+> `rtl2832`) were loaded yet readsb still opened the dongle — librtlsdr detaches them
+> itself, so the traditional blacklist was not needed.
 
 #### Raspberry Pi Zero 2 W
 
@@ -174,8 +179,11 @@ on Linux) and point any consumer at them:
 
 Anything local can also just read `tar1090/html/data/aircraft.json`.
 
-> On a Pi, wiedehopf's packaging shifts the whole port range: SBS-1 is on **20003**, not
-> 30003. `install.sh` reads `/etc/default/readsb` and probes rather than assuming.
+> **Don't assume the port.** wiedehopf's readsb uses the same 300xx range as this repo
+> (SBS-1 **30003**, Beast **30005**) — verified on a Pi 4 running Debian 13. It only
+> shifts down to 200xx if you install it with the `push-30004` argument, which exists so
+> readsb can coexist with an existing dump1090-fa that already owns 30xxx. `install.sh`
+> reads `/etc/default/readsb` and probes, so it is right either way.
 
 ### Feeding aggregators
 
@@ -240,9 +248,10 @@ sudo piaware-config receiver-port 30005     # see the port note below
 sudo systemctl restart piaware
 ```
 
-> **Port gotcha:** `30005` is right on macOS with this repo's config. On a Pi running
-> wiedehopf's readsb, Beast is on **20005** — the same 300xx → 200xx shift that moves
-> SBS-1 to 20003. Check `/etc/default/readsb` before assuming.
+> **Check the port, don't assume it.** `30005` is right on macOS with this repo's config,
+> and also on a stock wiedehopf readsb install (verified on a Pi 4). It is **20005** only
+> when readsb was installed with the `push-30004` argument, used to sit alongside an
+> existing dump1090-fa. `grep net-bo-port /etc/default/readsb` settles it.
 
 Then claim the receiver to your account:
 
