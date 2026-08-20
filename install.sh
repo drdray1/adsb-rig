@@ -181,6 +181,11 @@ UUID="$(cat "$UUID_FILE")"
 # Build the <string> entries for readsb's --net-connector args, one pair per
 # active feeds.conf line. Written to a temp file that sed splices into the plist.
 CONNECTOR_XML="$(mktemp)"
+# Plain-argument form of the same thing. macOS splices the XML above into a
+# plist; Linux has no plist -- readsb there is wiedehopf's system service reading
+# /etc/default/readsb -- so it needs the args as a flat string.
+RIG_NET_ARGS=""
+RIG_DEC_ARGS=""
 FEED_COUNT=0
 if [ -f "$RIG_DIR/feeds.conf" ]; then
   while read -r host port proto rest; do
@@ -191,6 +196,7 @@ if [ -f "$RIG_DIR/feeds.conf" ]; then
       printf '\t\t<string>--net-connector</string>\n'
       printf '\t\t<string>%s,%s,%s</string>\n' "$host" "$port" "$proto"
     } >> "$CONNECTOR_XML"
+    RIG_NET_ARGS="$RIG_NET_ARGS --net-connector $host,$port,$proto"
     FEED_COUNT=$((FEED_COUNT + 1))
     echo "  feeding $host:$port ($proto)"
   done < "$RIG_DIR/feeds.conf"
@@ -202,6 +208,7 @@ if [ "$FEED_COUNT" -gt 0 ]; then
     printf '\t\t<string>--uuid</string>\n'
     printf '\t\t<string>%s</string>\n' "$UUID"
   } >> "$CONNECTOR_XML"
+  RIG_NET_ARGS="$RIG_NET_ARGS --uuid $UUID"
 elif [ -f "$RIG_DIR/feeds.conf" ]; then
   echo "  feeds.conf has no active entries (all commented out)"
 fi
@@ -218,7 +225,14 @@ if [ -n "${LAT:-}" ] && [ -n "${LON:-}" ]; then
     printf '\t\t<string>--lon</string>\n'
     printf '\t\t<string>%s</string>\n' "$LON"
   } >> "$CONNECTOR_XML"
-  echo "  receiver position $LAT, $LON"
+  if [ "$PLATFORM" = linux ]; then
+    # readsb-set-location writes --lat/--lon into DECODER_OPTIONS itself. Two
+    # tools editing the same setting would fight, so defer rather than duplicate.
+    echo "  receiver position: on Linux this is owned by readsb-set-location, not"
+    echo "    station.conf. Apply it with:  sudo readsb-set-location $LAT $LON"
+  else
+    echo "  receiver position $LAT, $LON"
+  fi
 elif [ -n "${LAT:-}${LON:-}" ]; then
   warn "LAT and LON must both be set; ignoring the one that is."
 fi
@@ -228,8 +242,64 @@ if [ -n "${PREAMBLE:-}" ]; then
     printf '\t\t<string>--preamble-threshold</string>\n'
     printf '\t\t<string>%s</string>\n' "$PREAMBLE"
   } >> "$CONNECTOR_XML"
+  RIG_DEC_ARGS="$RIG_DEC_ARGS --preamble-threshold $PREAMBLE"
   echo "  preamble-threshold $PREAMBLE"
 fi
+
+## ------------------------------------------------- apply args on Linux
+
+# On Linux readsb is wiedehopf's system service, configured by shell-style
+# variables in /etc/default/readsb. systemd's EnvironmentFile does NOT expand
+# variables, so `NET_OPTIONS="$NET_OPTIONS --net-connector ..."` would be passed
+# through literally and break readsb. The line has to be rewritten in full.
+#
+# A snapshot of the original value is kept under /var/lib/adsb-rig so repeated
+# runs rebuild from the original rather than compounding duplicates.
+apply_readsb_var() {  # $1=VARNAME  $2=args to append
+  local var="$1" extra="$2"
+  [ -z "$extra" ] && return 0
+  if ! sudo -n true 2>/dev/null; then
+    warn "need sudo to write /etc/default/readsb; skipping: $var$extra"
+    return 0
+  fi
+  sudo python3 - "$var" "$extra" <<'PYEOF'
+import os, shutil, sys
+var, extra = sys.argv[1], sys.argv[2].strip()
+conf = '/etc/default/readsb'
+base_dir = '/var/lib/adsb-rig'
+os.makedirs(base_dir, exist_ok=True)
+base_path = os.path.join(base_dir, var + '.base')
+
+with open(conf) as fh:
+    lines = fh.readlines()
+idx = next((i for i, l in enumerate(lines) if l.startswith(var + '=')), None)
+if idx is None:
+    print('  %s not present in %s; nothing changed' % (var, conf))
+    sys.exit(0)
+
+current = lines[idx].split('=', 1)[1].strip().strip('"')
+if os.path.exists(base_path):
+    base = open(base_path).read().strip()
+else:
+    base = current
+    with open(base_path, 'w') as fh:
+        fh.write(base)
+
+new = (base + ' ' + extra).strip()
+if new == current:
+    print('  %s already up to date' % var)
+    sys.exit(0)
+
+backup = conf + '.adsb-rig.bak'
+if not os.path.exists(backup):
+    shutil.copy2(conf, backup)
+    print('  backed up %s -> %s' % (conf, backup))
+lines[idx] = '%s="%s"\n' % (var, new)
+with open(conf, 'w') as fh:
+    fh.writelines(lines)
+print('  %s updated' % var)
+PYEOF
+}
 
 ## ---------------------------------------------------------------- render units
 
@@ -287,6 +357,18 @@ if [ "$PLATFORM" = macos ]; then
     echo "  $PREFIX.muninn.plist"
   fi
 else
+  # Apply feed connectors / tuning to the system readsb before touching units.
+  if [ -n "$RIG_NET_ARGS" ] || [ -n "$RIG_DEC_ARGS" ]; then
+    say "Applying readsb options to /etc/default/readsb"
+    apply_readsb_var NET_OPTIONS "$RIG_NET_ARGS"
+    apply_readsb_var DECODER_OPTIONS "$RIG_DEC_ARGS"
+    if sudo -n true 2>/dev/null; then
+      sudo systemctl restart readsb && echo "  restarted readsb"
+    else
+      echo "  run: sudo systemctl restart readsb"
+    fi
+  fi
+
   UNIT_DIR="$HOME/.config/systemd/user"
   mkdir -p "$UNIT_DIR"
   if [ "$WANT_FEEDER" = yes ]; then
