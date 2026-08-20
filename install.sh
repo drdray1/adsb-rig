@@ -255,14 +255,18 @@ fi
 #
 # A snapshot of the original value is kept under /var/lib/adsb-rig so repeated
 # runs rebuild from the original rather than compounding duplicates.
+# Returns 10 if the file was modified, 0 if it was already correct, so the
+# caller can skip a pointless readsb restart -- restarting drops the SDR and
+# loses every track and feed connection for a few seconds.
+READSB_CONF_CHANGED=0
 apply_readsb_var() {  # $1=VARNAME  $2=args to append
-  local var="$1" extra="$2"
+  local var="$1" extra="$2" rc=0
   [ -z "$extra" ] && return 0
   if ! sudo -n true 2>/dev/null; then
     warn "need sudo to write /etc/default/readsb; skipping: $var$extra"
     return 0
   fi
-  sudo python3 - "$var" "$extra" <<'PYEOF'
+  sudo python3 - "$var" "$extra" <<'PYEOF' || rc=$?
 import os, shutil, sys
 var, extra = sys.argv[1], sys.argv[2].strip()
 conf = '/etc/default/readsb'
@@ -288,7 +292,7 @@ else:
 new = (base + ' ' + extra).strip()
 if new == current:
     print('  %s already up to date' % var)
-    sys.exit(0)
+    sys.exit(0)          # 0 = unchanged; 10 below = changed
 
 backup = conf + '.adsb-rig.bak'
 if not os.path.exists(backup):
@@ -298,7 +302,10 @@ lines[idx] = '%s="%s"\n' % (var, new)
 with open(conf, 'w') as fh:
     fh.writelines(lines)
 print('  %s updated' % var)
+sys.exit(10)
 PYEOF
+  [ "$rc" = 10 ] && READSB_CONF_CHANGED=1
+  return 0
 }
 
 ## ---------------------------------------------------------------- render units
@@ -362,10 +369,14 @@ else
     say "Applying readsb options to /etc/default/readsb"
     apply_readsb_var NET_OPTIONS "$RIG_NET_ARGS"
     apply_readsb_var DECODER_OPTIONS "$RIG_DEC_ARGS"
-    if sudo -n true 2>/dev/null; then
-      sudo systemctl restart readsb && echo "  restarted readsb"
+    if [ "$READSB_CONF_CHANGED" = 1 ]; then
+      if sudo -n true 2>/dev/null; then
+        sudo systemctl restart readsb && echo "  restarted readsb"
+      else
+        echo "  run: sudo systemctl restart readsb"
+      fi
     else
-      echo "  run: sudo systemctl restart readsb"
+      echo "  no change; leaving readsb running"
     fi
   fi
 
