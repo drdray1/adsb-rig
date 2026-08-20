@@ -28,6 +28,7 @@ HTTP_PORT="${HTTP_PORT:-8080}"
 BEAST_PORT="${BEAST_PORT:-30005}"
 GAIN="${GAIN:-auto}"
 INTERVAL="${INTERVAL:-3600}"
+CHECK_INTERVAL="${CHECK_INTERVAL:-300}"
 SBS_PORT=""
 WANT_FEEDER=""
 
@@ -248,6 +249,7 @@ render() {  # $1=template $2=dest
       -e "s|__HTTP_PORT__|$HTTP_PORT|g" \
       -e "s|__BEAST_PORT__|$BEAST_PORT|g" \
       -e "s|__INTERVAL__|$INTERVAL|g" \
+      -e "s|__CHECK_INTERVAL__|$CHECK_INTERVAL|g" \
       -e "s|__GAIN__|$GAIN|g" \
       -e "/__CONNECTORS__/r $CONNECTOR_XML" \
       -e "/__CONNECTORS__/d" \
@@ -262,13 +264,14 @@ BEAST_PORT=$BEAST_PORT
 LOG_DIR=$LOG_DIR
 PREFIX=$PREFIX
 FEEDER_INSTANCE=localhost:$SBS_PORT
+DATA_DIR=$RIG_DIR/tar1090/html/data
 EOF
 
 if [ "$PLATFORM" = macos ]; then
   AGENTS="$HOME/Library/LaunchAgents"
   mkdir -p "$AGENTS"
   say "Installing launchd agents"
-  for svc in readsb web; do
+  for svc in readsb web watchdog; do
     render "$RIG_DIR/launchd/$PREFIX.$svc.plist.template" "$AGENTS/$PREFIX.$svc.plist"
     validate_plist "$AGENTS/$PREFIX.$svc.plist"
     echo "  $PREFIX.$svc.plist"

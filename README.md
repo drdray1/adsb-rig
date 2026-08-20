@@ -88,7 +88,7 @@ It works, but the Zero 2 W has real constraints — worth knowing before you bui
 ./adsb-ctl start      # bring everything up
 ./adsb-ctl stop       # release the SDR for other radio software
 ./adsb-ctl status     # what's running, ports, live aircraft count
-./adsb-ctl logs       # follow logs (optionally: logs readsb|web|muninn)
+./adsb-ctl logs       # follow logs (optionally: logs readsb|web|muninn|watchdog)
 ./adsb-ctl restart
 ```
 
@@ -101,6 +101,52 @@ sudo loginctl enable-linger $USER
 
 **Only one process can hold the dongle.** Run `./adsb-ctl stop` before using SDR++, GQRX or
 similar, and `./adsb-ctl start` afterwards.
+
+### The watchdog
+
+`adsb-ctl status` reports a fourth service:
+
+```
+watchdog     armed (checks every 300s)
+```
+
+It exists because **`KeepAlive` only reacts to a process that exits.** After the machine
+sleeps, the USB bulk transfer from the dongle can come back broken: readsb stays alive and
+busy, but the sample stream is garbage. Observed in the wild as
+
+```
+Lost 4 packets (-224355.0 us) on USB, MLAT could be UNSTABLE (ppm: -7571)
+SDR ppm out of specification ... or local clock jumped!  ppm: 1250
+```
+
+with **0 aircraft tracked for hours**. No service manager can detect "running but useless",
+so the check has to read readsb's own output.
+
+It looks at `stats.json` → `last1min.local.samples_processed`: samples pulled off the USB
+stream. That number keeps climbing even when no aircraft are in range, which is the whole
+point — it separates *3am, empty sky* from *the stream is dead*. **A check on the aircraft
+or message count would restart your radio every quiet night.**
+
+Three guards keep it from being a nuisance:
+
+| Guard | Default | Why |
+|---|---|---|
+| Warm-up grace | `GRACE_SECONDS=180` | `last1min` is empty right after start; judging it early guarantees a false positive. |
+| Restart backoff | `MIN_RESTART_INTERVAL=600` | Stops a boot loop when the dongle is simply unplugged — `KeepAlive` already handles that case properly. |
+| Loaded check | — | If you ran `adsb-ctl stop` to free the dongle for SDR++, the watchdog does nothing. It will not resurrect a radio you deliberately stopped. |
+
+Run it by hand any time; it prints nothing when healthy:
+
+```bash
+./adsb-watchdog.sh --dry-run    # report only, change nothing
+tail -f logs/watchdog.log       # empty log = nothing has gone wrong
+```
+
+Change the cadence with `CHECK_INTERVAL=300 ./install.sh`.
+
+> On Linux this is installed but **untested on real hardware**, and readsb there is a
+> system service owned by wiedehopf's installer — restarting it needs privileges the
+> watchdog may not have. It logs and gives up rather than pretending it worked.
 
 ### Capturing a session by hand
 

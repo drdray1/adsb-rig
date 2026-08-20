@@ -48,7 +48,7 @@ EOF
 # and makes the WDGWars feeder genuinely optional.
 installed_services() {
   local s
-  for s in readsb web muninn; do
+  for s in readsb web muninn watchdog; do
     [ -f "$AGENTS_DIR/$PREFIX.$s.plist" ] && echo "$s"
   done
   return 0
@@ -110,14 +110,23 @@ macos_stop() {
 }
 
 macos_status() {
-  local svc pid
-  for svc in readsb web muninn; do
+  local svc pid every
+  for svc in readsb web muninn watchdog; do
     printf "  %-12s " "$svc"
     if [ ! -f "$AGENTS_DIR/$PREFIX.$svc.plist" ]; then
       echo "not installed"
     elif launchctl print "$DOMAIN/$PREFIX.$svc" >/dev/null 2>&1; then
       pid=$(launchctl print "$DOMAIN/$PREFIX.$svc" 2>/dev/null | awk '/^\tpid = /{print $3; exit}')
-      if [ -n "${pid:-}" ]; then echo "running (pid $pid)"; else echo "loaded, not running"; fi
+      if [ -n "${pid:-}" ]; then
+        echo "running (pid $pid)"
+      elif [ "$svc" = watchdog ]; then
+        # An interval job with no pid is idle between runs -- the healthy state.
+        # Reporting it as "not running" would read as a fault.
+        every=$(plutil -extract StartInterval raw "$AGENTS_DIR/$PREFIX.$svc.plist" 2>/dev/null || echo "?")
+        echo "armed (checks every ${every}s)"
+      else
+        echo "loaded, not running"
+      fi
     else
       echo "not loaded"
     fi

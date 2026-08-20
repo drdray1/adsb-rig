@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Rendered by install.sh; placeholders are substituted with real values.
+  Edit this template, not the copy in ~/Library/LaunchAgents, then re-run install.sh.
+
+  Periodic liveness check for readsb. KeepAlive on the readsb agent only reacts
+  to a process that exits; this catches the case where readsb is alive but its
+  USB sample stream died (typically after the machine sleeps).
+
+  Note for editors: a literal double hyphen is illegal inside an XML comment,
+  so flag names are written without their leading dashes here.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.drdray1.adsb.watchdog</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__HOME__/adsb/adsb-watchdog.sh</string>
+	</array>
+	<!-- StartInterval, not KeepAlive: this is a short check that exits, not a
+	     daemon. launchd reruns it on the interval. -->
+	<key>StartInterval</key>
+	<integer>__CHECK_INTERVAL__</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>WorkingDirectory</key>
+	<string>__HOME__/adsb</string>
+	<key>StandardOutPath</key>
+	<string>__HOME__/adsb/logs/watchdog.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/adsb/logs/watchdog.log</string>
+</dict>
+</plist>
